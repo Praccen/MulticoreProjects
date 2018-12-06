@@ -87,7 +87,7 @@ int main() {
 	}
 
 
-	parSort<<<1, 1>>> (parNumSeq, randomArrayLength);
+	parSort <<<1, 1>>> (parNumSeq, randomArrayLength);
 
 	cudaDeviceSynchronize();
 
