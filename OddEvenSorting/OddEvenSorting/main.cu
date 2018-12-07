@@ -38,28 +38,31 @@ void seqOddEvenSort(int *numSeq, int randomArrayLength) {
 	std::cout << "Sequential sort took " << sortTime << " milliseconds.\n";
 }
 
+
 __global__
 void parSort(int *numSeq, int randomArrayLength) {
-	int index = threadIdx.x;
-	int stride = blockDim.x;
+	int threadIndex = threadIdx.x;
+	int blockIndex = blockIdx.x;
+	int blockSize = blockDim.x;
+	int stride = gridDim.x * blockSize;
 
-	__shared__ bool unsorted;
-	unsorted = true;
-	while (unsorted) {
-		__syncthreads();
-		unsorted = false;
-		for (int k = 0; k < 2; k++) {
-			for (int i = index * 2 + k, j = index * 2 + k + 1; j < randomArrayLength; i += stride * 2, j += stride * 2) {
-				if (numSeq[j] < numSeq[i]) {
-					int temp = numSeq[i];
-					numSeq[i] = numSeq[j];
-					numSeq[j] = temp;
-					unsorted = true;
-				}
+	/*__shared__ bool sorted;
+	sorted = true;*/
+	//__syncthreads();
+	for (int k = 0; k < 2; k++) {
+		for (int i = (blockIndex * blockSize + threadIndex) * 2 + k, j = (blockIndex * blockSize + threadIndex) * 2 + k + 1; j < randomArrayLength; i += stride * 2, j += stride * 2) {
+			if (numSeq[j] < numSeq[i]) {
+				int temp = numSeq[i];
+				numSeq[i] = numSeq[j];
+				numSeq[j] = temp;
+				//sorted = false;
 			}
-			__syncthreads();
 		}
+		__syncthreads();
 	}
+
+	/*if (*sortedFinal == true)
+		*sortedFinal = sorted;*/
 }
 
 
@@ -74,7 +77,7 @@ void printArray(int *numSeq, int randomArrayLength) {
 int main() {
 	srand(time(NULL));
 
-	int randomArrayLength = 1000;
+	int randomArrayLength = 3000;
 
 	//----Sequential sort----
 	int *numSeq;
@@ -94,7 +97,9 @@ int main() {
 
 	//----Sort in parallel----
 	int *parNumSeq;
+	//bool *sorted = false;
 	cudaMallocManaged(&parNumSeq, randomArrayLength * sizeof(int));
+	//cudaMallocManaged(&sorted, sizeof(bool));
 
 	// Initiate number sequence with random numbers
 	for (int i = 0; i < randomArrayLength; i++) {
@@ -105,15 +110,19 @@ int main() {
 	int sortTime;
 
 	m_start = Clock::now();
-	parSort <<<1, 1024>>> (parNumSeq, randomArrayLength);
+
+	for (int i = 0; i < 10000; i++) { // Replace with proper stop condition
+		parSort << <16, 32 >> > (parNumSeq, randomArrayLength);
+	}
 
 	cudaDeviceSynchronize();
+
 	m_end = Clock::now();
 
 	sortTime = (int)duration_cast<milliseconds>(m_end - m_start).count();
 	std::cout << "Parallell sort took " << sortTime << " milliseconds.\n";
 
-	//printArray(parNumSeq, randomArrayLength);
+	printArray(parNumSeq, randomArrayLength);
 
 	cudaFree(numSeq);
 	//------------------------
