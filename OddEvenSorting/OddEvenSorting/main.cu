@@ -12,11 +12,6 @@ using std::chrono::duration_cast;
 using std::chrono::milliseconds;
 
 void seqOddEvenSort(int *numSeq, int randomArrayLength) {
-	time_point<Clock> m_start, m_end;
-	int sortTime;
-
-	m_start = Clock::now();
-	// One iteration of odd-even sort
 	bool unsorted = true;
 	int temp = 0;
 	while (unsorted) {
@@ -32,37 +27,28 @@ void seqOddEvenSort(int *numSeq, int randomArrayLength) {
 			}
 		}
 	}
-	m_end = Clock::now();
-
-	sortTime = (int)duration_cast<milliseconds>(m_end - m_start).count();
-	std::cout << "Sequential sort took " << sortTime << " milliseconds.\n";
 }
 
 
 __global__
-void parSort(int *numSeq, int randomArrayLength) {
+void parSort(int *numSeq, int randomArrayLength, bool *sortedArr) {
 	int threadIndex = threadIdx.x;
 	int blockIndex = blockIdx.x;
 	int blockSize = blockDim.x;
 	int stride = gridDim.x * blockSize;
 
-	/*__shared__ bool sorted;
-	sorted = true;*/
-	//__syncthreads();
+	sortedArr[blockIndex] = true;
 	for (int k = 0; k < 2; k++) {
 		for (int i = (blockIndex * blockSize + threadIndex) * 2 + k, j = (blockIndex * blockSize + threadIndex) * 2 + k + 1; j < randomArrayLength; i += stride * 2, j += stride * 2) {
 			if (numSeq[j] < numSeq[i]) {
 				int temp = numSeq[i];
 				numSeq[i] = numSeq[j];
 				numSeq[j] = temp;
-				//sorted = false;
+				sortedArr[blockIndex] = false;
 			}
 		}
 		__syncthreads();
 	}
-
-	/*if (*sortedFinal == true)
-		*sortedFinal = sorted;*/
 }
 
 
@@ -72,61 +58,102 @@ void printArray(int *numSeq, int randomArrayLength) {
 	for (int i = 0; i < randomArrayLength; i++) {
 		std::cout << numSeq[i] << " ";
 	}
+	std::cout << "\n";
 }
 
 int main() {
-	srand(time(NULL));
+	//srand(time(NULL)); //No srand to assure the same array each time. No random variables in the testing.
 
-	int randomArrayLength = 3000;
+	time_point<Clock> m_start, m_end;
+
+	int randomArrayLength = 1000;
+	int *numbers;
+	numbers = new int[randomArrayLength];
+
+	// Initiate number sequence with random numbers
+	for (int i = 0; i < randomArrayLength; i++) {
+		numbers[i] = rand() % 100; // between 0 and 9
+	}
+
+	//printArray(numbers, randomArrayLength);
 
 	//----Sequential sort----
 	int *numSeq;
 	numSeq = new int[randomArrayLength];
 
-	// Initiate number sequence with random numbers
+	//Copy the values from the random array to the sequential array.
 	for (int i = 0; i < randomArrayLength; i++) {
-		numSeq[i] = rand() % 100; // between 0 and 9
+		numSeq[i] = numbers[i];
 	}
 
 	//Sort sequentially
-	//seqOddEvenSort(numSeq, randomArrayLength);
+	//Time it
+	m_start = Clock::now();
+	seqOddEvenSort(numSeq, randomArrayLength);
+	m_end = Clock::now();
+	int seqSortTime = (int)duration_cast<milliseconds>(m_end - m_start).count();
+	std::cout << "Sequential sort took " << seqSortTime << " milliseconds.\n";
+
 	//printArray(numSeq, randomArrayLength);
 
 	delete[] numSeq;
 	//-----------------------
 
+
 	//----Sort in parallel----
+	int numberOfBlocks = 32;
+	int numberOfThreadsPerBlock = 1024;
+
 	int *parNumSeq;
-	//bool *sorted = false;
+	bool *sortedArr;
+
+	//Allocate memory on the GPU.
 	cudaMallocManaged(&parNumSeq, randomArrayLength * sizeof(int));
-	//cudaMallocManaged(&sorted, sizeof(bool));
+	cudaMallocManaged(&sortedArr, numberOfBlocks * sizeof(bool));
 
-	// Initiate number sequence with random numbers
+	//Copy the random numbers to the parrallell array.
 	for (int i = 0; i < randomArrayLength; i++) {
-		parNumSeq[i] = rand() % 100; // between 0 and 9
+		parNumSeq[i] = numbers[i];
 	}
 
-	time_point<Clock> m_start, m_end;
-	int sortTime;
+	//Initialize the sorted array. Used for stop condition
+	for (int i = 0; i < numberOfBlocks; i++) {
+		sortedArr[i] = false;
+	}
 
+	bool sorted = false;
+	int syncCounter = 0;
+
+	//Sort in parallell
+	//Time it
 	m_start = Clock::now();
+	while (!sorted) {
+		syncCounter++;
+		parSort << <numberOfBlocks, numberOfThreadsPerBlock >> > (parNumSeq, randomArrayLength, sortedArr);
+		if (syncCounter % 200 == 0) { //Check the stop condition every 200 executions.
+			cudaDeviceSynchronize(); //Very costly, therefore we only do it once every 200 executions.
 
-	for (int i = 0; i < 10000; i++) { // Replace with proper stop condition
-		parSort << <16, 32 >> > (parNumSeq, randomArrayLength);
+			//See if the array is completely sorted.
+			sorted = true;
+			for (int i = 0; i < numberOfBlocks; i++) {
+				if (sortedArr[i] == false) {
+					sorted = false; //Break the while loop.
+					i = numberOfBlocks;
+				}
+			}
+		}
 	}
-
-	cudaDeviceSynchronize();
-
 	m_end = Clock::now();
 
-	sortTime = (int)duration_cast<milliseconds>(m_end - m_start).count();
-	std::cout << "Parallell sort took " << sortTime << " milliseconds.\n";
+	int parSortTime = (int)duration_cast<milliseconds>(m_end - m_start).count();
+	std::cout << "Parallell sort took " << parSortTime << " milliseconds.\n";
 
-	printArray(parNumSeq, randomArrayLength);
+	//printArray(parNumSeq, randomArrayLength);
 
-	cudaFree(numSeq);
+	//Free the GPU memory.
+	cudaFree(parNumSeq);
+	cudaFree(sortedArr);
 	//------------------------
-
 
 	getchar();
 	return 0;
