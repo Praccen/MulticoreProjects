@@ -66,7 +66,7 @@ int main() {
 
 	time_point<Clock> m_start, m_end;
 
-	int randomArrayLength = 1000;
+	int randomArrayLength = 100000;
 	int *numbers;
 	numbers = new int[randomArrayLength];
 
@@ -102,7 +102,7 @@ int main() {
 
 	//----Sort in parallel----
 	int numberOfBlocks = 32;
-	int numberOfThreadsPerBlock = 1024;
+	int numberOfThreadsPerBlock = 256;
 
 	int *parNumSeq;
 	bool *sortedArr;
