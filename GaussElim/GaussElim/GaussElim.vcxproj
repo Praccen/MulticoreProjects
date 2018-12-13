@@ -11,12 +11,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="gauseq.cpp" />
-    <ClCompile Include="stdafx.cpp" />
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="stdafx.h" />
-    <ClInclude Include="targetver.h" />
+    <ClCompile Include="gauseq.cu" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{173D24E3-59E5-4C51-BEA7-AC7329B5E4C9}</ProjectGuid>
