@@ -1,5 +1,4 @@
 #include <iostream>
-#include <vector>
 #include <time.h>
 #include <chrono>
 
@@ -72,7 +71,7 @@ int main() {
 
 	// Initiate number sequence with random numbers
 	for (int i = 0; i < randomArrayLength; i++) {
-		numbers[i] = rand() % 100; // between 0 and 9
+		numbers[i] = rand() % 100; // between 0 and 99
 	}
 
 	//printArray(numbers, randomArrayLength);
@@ -107,7 +106,7 @@ int main() {
 	int *parNumSeq;
 	bool *sortedArr;
 
-	//Allocate memory on the GPU.
+	//Allocate arrays in unified memory (accessable by all processors in the system).
 	cudaMallocManaged(&parNumSeq, randomArrayLength * sizeof(int));
 	cudaMallocManaged(&sortedArr, numberOfBlocks * sizeof(bool));
 

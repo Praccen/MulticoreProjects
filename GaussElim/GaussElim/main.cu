@@ -1,56 +1,61 @@
 #include <iostream>
+#include <time.h>
+#include <chrono>
+
+#include <cuda_runtime.h>
+#include <cuda_runtime_api.h>
 
 //Data variables
-double **matrix;
-double *vectorB;
-double *vectorY;
+double **g_matrix;
+double *g_vectorB;
+double *g_vectorY;
 
 //Options
-int matrixSize;
-const char* init;
-int maxNum;
+int g_matrixSize;
+const char* g_init;
+int g_maxNum;
 
 void initMatrix() {
-	matrix = new double*[matrixSize];
-	vectorB = new double[matrixSize];
-	vectorY = new double[matrixSize];
+	g_matrix = new double*[g_matrixSize];
+	g_vectorB = new double[g_matrixSize];
+	g_vectorY = new double[g_matrixSize];
 
-	for (int i = 0; i < matrixSize; i++) {
-		matrix[i] = new double[matrixSize];
+	for (int i = 0; i < g_matrixSize; i++) {
+		g_matrix[i] = new double[g_matrixSize];
 
 		//Init vectors
-		vectorB[i] = 2.0;
-		vectorY[i] = 1.0;
+		g_vectorB[i] = 2.0;
+		g_vectorY[i] = 1.0;
 	}
 
-	if (strcmp(init, "rand") == 0) {
-		for (int i = 0; i < matrixSize; i++) {
-			for (int j = 0; j < matrixSize; j++) {
+	if (strcmp(g_init, "rand") == 0) {
+		for (int i = 0; i < g_matrixSize; i++) {
+			for (int j = 0; j < g_matrixSize; j++) {
 				if (i == j) { //diagonal dominance
-					matrix[i][j] = (double)(rand() % maxNum) + 5.0;
+					g_matrix[i][j] = (double)(rand() % g_maxNum) + 5.0;
 				}
 				else {
-					matrix[i][j] = (double)(rand() % maxNum) + 1.0;
+					g_matrix[i][j] = (double)(rand() % g_maxNum) + 1.0;
 				}
 			}
 		}
 	}
 
-	if (strcmp(init, "fast") == 0) {
-		for (int i = 0; i < matrixSize; i++) {
-			for (int j = 0; j < matrixSize; j++) {
+	if (strcmp(g_init, "fast") == 0) {
+		for (int i = 0; i < g_matrixSize; i++) {
+			for (int j = 0; j < g_matrixSize; j++) {
 				if (i == j) { //diagonal dominance
-					matrix[i][j] = 5.0;
+					g_matrix[i][j] = 5.0;
 				}
 				else {
-					matrix[i][j] = 2.0;
+					g_matrix[i][j] = 2.0;
 				}
 			}
 		}
 	}
 }
 
-void gaussSeq() {
+void gaussSeq(double **matrix, int matrixSize, double *vectorB, double *vectorY) {
 	/* Gaussian elimination algorithm, Algo 8.4 from Grama */
 	for (int k = 0; k < matrixSize; k++) { /* Outer loop */
 		for (int j = k + 1; j < matrixSize; j++) {
@@ -68,40 +73,45 @@ void gaussSeq() {
 	}
 }
 
+__global__
+void gaussPar(double **matrix, int matrixSize, double *vectorB, double *vectorY) {
+
+}
+
 void printMatrix() {
 	printf("Matrix A: \n");
-	for (int i = 0; i < matrixSize; i++) {
+	for (int i = 0; i < g_matrixSize; i++) {
 		printf("[");
-		for (int j = 0; j < matrixSize; j++) {
-			printf(" %5.2f,", matrix[i][j]);
+		for (int j = 0; j < g_matrixSize; j++) {
+			printf(" %5.2f,", g_matrix[i][j]);
 		}
 		printf("]\n");
 	}
 
 	printf("Vector b: \n[");
-	for (int i = 0; i < matrixSize; i++) {
-		printf(" %5.2f,", vectorB[i]);
+	for (int i = 0; i < g_matrixSize; i++) {
+		printf(" %5.2f,", g_vectorB[i]);
 	}
 	printf("]\n");
 
 	printf("Vector y: \n[");
-	for (int i = 0; i < matrixSize; i++) {
-		printf(" %5.2f,", vectorY[i]);
+	for (int i = 0; i < g_matrixSize; i++) {
+		printf(" %5.2f,", g_vectorY[i]);
 	}
 	printf("]\n\n");
 }
 
 int main() {
-	matrixSize = 5;
-	maxNum = 15;
-	init = "rand";
+	g_matrixSize = 5;
+	g_maxNum = 15;
+	g_init = "rand";
 	//init = "fast";
 
 	initMatrix();
 
 	printMatrix();
 
-	gaussSeq();
+	gaussSeq(g_matrix, g_matrixSize, g_vectorB, g_vectorY);
 
 	printMatrix();
 
