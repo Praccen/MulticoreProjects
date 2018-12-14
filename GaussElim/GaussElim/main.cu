@@ -57,7 +57,6 @@ double **initMatrixPar() {
 
 	for (int i = 0; i < g_matrixSize; i++) {
 		cudaMallocManaged(&matrix[i], g_matrixSize * sizeof(double));
-		//matrix[i] = new double[g_matrixSize];
 	}
 
 	if (strcmp(g_init, "rand") == 0) {
@@ -139,48 +138,30 @@ void gaussSeq(double **matrix, int matrixSize, double *vectorB, double *vectorY)
 		}
 		vectorY[k] = vectorB[k] / matrix[k][k];
 		matrix[k][k] = 1.0;
-		//for (int i = k + 1; i < matrixSize; i++) {
-		//	for (int j = k + 1; j < matrixSize; j++) {
-		//		matrix[i][j] = matrix[i][j] - matrix[i][k] * matrix[k][j]; /* Elimination step */
-		//	}
-		//	vectorB[i] = vectorB[i] - matrix[i][k] * vectorY[k];
-		//	matrix[i][k] = 0.0;
-		//}
+
+		for (int i = k + 1; i < matrixSize; i++) {
+			for (int j = k + 1; j < matrixSize; j++) {
+				matrix[i][j] = matrix[i][j] - matrix[i][k] * matrix[k][j]; /* Elimination step */
+			}
+			vectorB[i] = vectorB[i] - matrix[i][k] * vectorY[k];
+			matrix[i][k] = 0.0;
+		}
 	}
 }
 
 __global__
-void gaussPar(double **matrix, int matrixSize, double *vectorB, double *vectorY) {
+void gaussPar1(double **matrix, int matrixSize, double *vectorB, double *vectorY, int k) {
 	int threadIndex = threadIdx.x;
 	int blockIndex = blockIdx.x;
 	int blockSize = blockDim.x;
 	int stride = gridDim.x * blockSize;
 
-	for (int k = threadIndex + blockSize * blockIndex; k < matrixSize; k += stride) {
-		for (int j = k + 1; j < matrixSize; j++) {
-			matrix[k][j] = matrix[k][j] / matrix[k][k]; /* Division step */
+	for (int j = k + 1 + threadIndex + blockIndex * blockSize; j < matrixSize; j += stride) {
+		matrix[k][j] = matrix[k][j] / matrix[k][k]; /* Division step */
+		for (int i = k + 1; i < matrixSize; i++) {
+			matrix[i][j] = matrix[i][j] - matrix[i][k] * matrix[k][j]; /* Elimination step */
 		}
-
-		vectorY[k] = vectorB[k] / matrix[k][k];
-		matrix[k][k] = 1.0;
 	}
-
-
-
-	//for (int k = 0; k < matrixSize; k++) { /* Outer loop */
-	//	for (int j = k + 1; j < matrixSize; j++) {
-	//		matrix[k][j] = matrix[k][j] / matrix[k][k]; /* Division step */
-	//	}
-	//	vectorY[k] = vectorB[k] / matrix[k][k];
-	//	matrix[k][k] = 1.0;
-	//	for (int i = k + 1; i < matrixSize; i++) {
-	//		for (int j = k + 1; j < matrixSize; j++) {
-	//			matrix[i][j] = matrix[i][j] - matrix[i][k] * matrix[k][j]; /* Elimination step */
-	//		}
-	//		vectorB[i] = vectorB[i] - matrix[i][k] * vectorY[k];
-	//		matrix[i][k] = 0.0;
-	//	}
-	//}
 }
 
 void print(double **matrix, int matrixSize, double *vectorB, double *vectorY) {
@@ -209,7 +190,7 @@ void print(double **matrix, int matrixSize, double *vectorB, double *vectorY) {
 int main() {
 	time_point<Clock> m_start, m_end;
 
-	g_matrixSize = 2048;
+	g_matrixSize = 5;
 	g_maxNum = 15;
 	//g_init = "rand";
 	g_init = "fast";
@@ -218,7 +199,9 @@ int main() {
 	double *seqVectorB = initVectorBSeq();
 	double *seqVectorY = initVectorYSeq();
 
-	//print(seqMatrix, g_matrixSize, seqVectorB, seqVectorY);
+	if (g_matrixSize < 15) {
+		print(seqMatrix, g_matrixSize, seqVectorB, seqVectorY);
+	}
 
 	m_start = Clock::now();
 	gaussSeq(seqMatrix, g_matrixSize, seqVectorB, seqVectorY);
@@ -226,23 +209,40 @@ int main() {
 	int seqGaussTime = (int)duration_cast<milliseconds>(m_end - m_start).count();
 	std::cout << "Sequential gauss elimination took " << seqGaussTime << " milliseconds.\n";
 
-	//print(seqMatrix, g_matrixSize, seqVectorB, seqVectorY);
+	if (g_matrixSize < 15) {
+		print(seqMatrix, g_matrixSize, seqVectorB, seqVectorY);
+	}
 
 	double **parMatrix = initMatrixPar();
 	double *parVectorB = initVectorBPar();
 	double *parVectorY = initVectorYPar();
 
 	int numberOfBlocks = 32;
-	int numberOfThreadsPerBlock = 256;
+	int numberOfThreadsPerBlock = 1024;
 
 	m_start = Clock::now();
-	gaussPar << <numberOfBlocks, numberOfThreadsPerBlock >> > (parMatrix, g_matrixSize, parVectorB, parVectorY);
-	m_end = Clock::now();
+	for (int k = 0; k < g_matrixSize; k++) {
+		gaussPar1 << <numberOfBlocks, numberOfThreadsPerBlock >> > (parMatrix, g_matrixSize, parVectorB, parVectorY, k);
+	}
 	cudaDeviceSynchronize();
+
+	for (int k = 0; k < g_matrixSize; k++) {
+		parVectorY[k] = parVectorB[k] / parMatrix[k][k];
+		parMatrix[k][k] = 1.0;
+
+		for (int i = k + 1; i < g_matrixSize; i++) {
+			parVectorB[i] = parVectorB[i] - parMatrix[i][k] * parVectorY[k];
+			parMatrix[i][k] = 0.0;
+		}
+	}
+	m_end = Clock::now();
 
 	int parGaussTime = (int)duration_cast<milliseconds>(m_end - m_start).count();
 	std::cout << "Parallell gauss elimination took " << parGaussTime << " milliseconds.\n";
-	//print(parMatrix, g_matrixSize, parVectorB, parVectorY);
+
+	if (g_matrixSize < 15) {
+		print(parMatrix, g_matrixSize, parVectorB, parVectorY);
+	}
 
 	getchar();
 	return 0;
