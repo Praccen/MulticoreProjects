@@ -54,9 +54,7 @@ void blurSeq() {
 	// Convolve and record the time taken to do the operation
 	auto begin = std::chrono::high_resolution_clock::now();
 	// Blur the image!
-	for (int i = 0; i < 5; i++) {
-		blurimage.convolve(mask5);
-	}
+	blurimage.convolve(mask5);
 	auto end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed = end - begin;
 	std::cout << "Time taken to convolve = " << elapsed.count() << " seconds";
@@ -75,65 +73,122 @@ void blurSeq() {
 	CImgDisplay main_disp(image, "Original image");
 	CImgDisplay main_disp2(blurimage, "Blurred image");
 
-	while (1)
+	getchar();
+
+	/*while (1)
 	{
 		main_disp.wait(); main_disp2.wait();
+	}*/
+}
+
+__global__
+void blurParClient(float *imageOrig, float *imageBlurred, int imageWidth, int imageHeight, float *mask, float maskTot) {
+	int threadIndex = threadIdx.x;
+	int blockIndex = blockIdx.x;
+	int blockSize = blockDim.x;
+	int stride = gridDim.x * blockSize;
+
+	//i * imageHeight + j * 3 + k
+
+	for (int i = threadIndex + blockIndex * blockSize; i < imageWidth * imageHeight; i += stride) {
+		int x = i % imageWidth;
+		int y = (int)floor((double)(i / imageWidth));
+
+		for (int c = 0; c < 3; c++) {
+			float tempValue = 0;
+			for (int maskY = -2; maskY < 3; maskY++) {
+				for (int maskX = -2; maskX < 3; maskX++) {
+					if (x + maskX >= 0 && x + maskX < imageWidth && y + maskY >= 0 && y + maskY < imageHeight) {
+						tempValue += imageOrig[(y + maskY) * imageWidth * 3 + (x + maskX) * 3 + c] * mask[(maskY + 2) * 5 + (maskX + 2)];
+					}
+				}
+			}
+			imageBlurred[y * imageWidth * 3 + x * 3 + c] = tempValue / maskTot;
+		}
 	}
 }
 
 void blurParHost() {
-	//Use CImg library to load the image(s)
+	//Use CImg library to load the image(s) and mask
 	CImg<unsigned char> image("cake.ppm"), blurimage("cake.ppm");
+
+	CImg<double> mask5(5, 5);
+	mask5(0, 0) = mask5(0, 4) = mask5(4, 0) = mask5(4, 4) = 5.0;
+	mask5(0, 1) = mask5(0, 3) = mask5(1, 0) = mask5(1, 4) = mask5(3, 0) = mask5(3, 4) = mask5(4, 1) = mask5(4, 3) = 6.0;
+	mask5(0, 2) = mask5(2, 0) = mask5(2, 4) = mask5(4, 2) = 7.0;
+	mask5(1, 1) = mask5(1, 3) = mask5(3, 1) = mask5(3, 3) = 8.0;
+	mask5(1, 2) = mask5(2, 1) = mask5(2, 3) = mask5(3, 2) = 9.0;
+	mask5(2, 2) = 10.0;
+
+	float maskTot = 0;
+	for (int i = 0; i < 5; i++) {
+		for (int j = 0; j < 5; j++) {
+			maskTot += mask5(i, j);
+		}
+	}
 
 	int imageWidth = image.width();
 	int imageHeight = image.height();
 
 	//Allocate
-	int ***imageOrig;
+	float *imageOrig;
+	cudaMallocManaged(&imageOrig, imageWidth * imageHeight * 3 * sizeof(float));
 
-	cudaMallocManaged(&imageOrig, imageWidth * sizeof(int **));
-	for (int i = 0; i < imageWidth; i++) {
-		cudaMallocManaged(&imageOrig[i], imageHeight * sizeof(int *));
-		for (int j = 0; j < imageHeight; j++) {
-			cudaMallocManaged(&imageOrig[i][j], 3 * sizeof(int));
-		}
-	}
+	float *imageBlurred;
+	cudaMallocManaged(&imageBlurred, imageWidth * imageHeight * 3 * sizeof(float));
 
-	int ***imageBlurred;
+	float *mask;
+	cudaMallocManaged(&mask, 5 * 5 * sizeof(float));
 
-	cudaMallocManaged(&imageBlurred, imageWidth * sizeof(int **));
-	for (int i = 0; i < imageWidth; i++) {
-		cudaMallocManaged(&imageBlurred[i], imageHeight * sizeof(int *));
-		for (int j = 0; j < imageHeight; j++) {
-			cudaMallocManaged(&imageBlurred[i][j], 3 * sizeof(int));
-		}
-	}
 
 	//Get image values
-	for (int i = 0; i < imageWidth; i++) {
-		for (int j = 0; j < imageHeight; j++) {
-			for (int k = 0; k < 3; k++) {
-				imageOrig[i][j][k] = (int)image(i, j, 0, k);
+	for (int y = 0; y < imageHeight; y++) {
+		for (int x = 0; x < imageWidth; x++) {
+			for (int c = 0; c < 3; c++) {
+				imageOrig[y * imageWidth * 3 + x * 3 + c] = (float)image(x, y, 0, c);
 			}
 		}
 	}
 
+	//Get mask values
+	for (int y = 0; y < 5; y++) {
+		for (int x = 0; x < 5; x++) {
+			mask[y * 5 + x] = mask5(x, y);
+		}
+	}
 
 
+	int nrOfBlocks = 32;
+	int nrOfThreadsPerBlock = 1024;
+
+	blurParClient << <nrOfBlocks, nrOfThreadsPerBlock >> > (imageOrig, imageBlurred, imageWidth, imageHeight, mask, maskTot);
+	cudaDeviceSynchronize();
+
+	//Set image values
+	for (int y = 0; y < imageHeight; y++) {
+		for (int x = 0; x < imageWidth; x++) {
+			for (int c = 0; c < 3; c++) {
+				blurimage(x, y, 0, c) = imageBlurred[y * imageWidth * 3 + x * 3 + c];
+			}
+		}
+	}
+
+	// Display the images in their original size
+	CImgDisplay main_disp(image, "Original image");
+	CImgDisplay main_disp2(blurimage, "Blurred image");
+
+	getchar();
 
 	//Deallocate
-	for (int i = 0; i < imageWidth; i++) {
-		for (int j = 0; j < imageHeight; j++) {
-			cudaFree(imageOrig[i][j]);
-			cudaFree(imageBlurred[i][j]);
-		}
-		cudaFree(imageOrig[i]);
-		cudaFree(imageBlurred[i]);
+	if (cudaFree(imageOrig) != cudaSuccess) {
+		std::cout << "Could not free imageOrig\n";
 	}
-	cudaFree(imageOrig);
-	cudaFree(imageBlurred);
-
-	cudaDeviceReset();
+	if (cudaFree(imageBlurred) != cudaSuccess) {
+		std::cout << "Could not free imageBlurred\n";
+	}
+	if (cudaFree(mask) != cudaSuccess) {
+		std::cout << "Could not free mask\n";
+	}
 }
 
 int main() {
@@ -144,6 +199,7 @@ int main() {
 
 	blurParHost();
 
-	//getchar();
-	return 0; 
+	getchar();
+	cudaDeviceReset();
+	return 0;
 }

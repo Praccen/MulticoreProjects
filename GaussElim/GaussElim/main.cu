@@ -150,7 +150,7 @@ void gaussSeq(double **matrix, int matrixSize, double *vectorB, double *vectorY)
 }
 
 __global__
-void gaussPar1(double **matrix, int matrixSize, double *vectorB, double *vectorY, int k) {
+void gaussPar(double **matrix, int matrixSize, double *vectorB, double *vectorY, int k) {
 	int threadIndex = threadIdx.x;
 	int blockIndex = blockIdx.x;
 	int blockSize = blockDim.x;
@@ -255,7 +255,7 @@ int main() {
 
 	m_start = Clock::now();
 	for (int k = 0; k < g_matrixSize; k++) {
-		gaussPar1 << <numberOfBlocks, numberOfThreadsPerBlock >> > (parMatrix, g_matrixSize, parVectorB, parVectorY, k);
+		gaussPar << <numberOfBlocks, numberOfThreadsPerBlock >> > (parMatrix, g_matrixSize, parVectorB, parVectorY, k);
 	}
 	cudaDeviceSynchronize();
 
@@ -311,11 +311,19 @@ int main() {
 
 	//Deallocate unified (par) memory
 	for (int i = 0; i < g_matrixSize; i++) {
-		cudaFree(parMatrix[i]);
+		if (cudaFree(parMatrix[i]) != cudaSuccess) {
+			std::cout << "Could not free parMatrix[" << i << "]\n";
+		}
 	}
-	cudaFree(parMatrix);
-	cudaFree(parVectorB);
-	cudaFree(parVectorY);
+	if (cudaFree(parMatrix) != cudaSuccess) {
+		std::cout << "Could not free parMatrix\n";
+	}
+	if (cudaFree(parVectorB) != cudaSuccess) {
+		std::cout << "Could not free parVectorB\n";
+	}
+	if (cudaFree(parVectorY) != cudaSuccess) {
+		std::cout << "Could not free parVectorY\n";
+	}
 
 	cudaDeviceReset();
 
