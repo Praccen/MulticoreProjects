@@ -154,6 +154,8 @@ int main() {
 	cudaFree(sortedArr);
 	//------------------------
 
+	cudaDeviceReset();
+
 	getchar();
 	return 0;
 }

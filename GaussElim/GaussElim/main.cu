@@ -317,6 +317,8 @@ int main() {
 	cudaFree(parVectorB);
 	cudaFree(parVectorY);
 
+	cudaDeviceReset();
+
 	getchar();
 	return 0;
 }
