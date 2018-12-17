@@ -82,7 +82,7 @@ void blurSeq() {
 }
 
 __global__
-void blurParClient(float *imageOrig, float *imageBlurred, int imageWidth, int imageHeight, float *mask, float maskTot) {
+void blurParClient(float *imageOrig, float *imageBlurred, int imageWidth, int imageHeight, float *mask) {
 	int threadIndex = threadIdx.x;
 	int blockIndex = blockIdx.x;
 	int blockSize = blockDim.x;
@@ -103,29 +103,22 @@ void blurParClient(float *imageOrig, float *imageBlurred, int imageWidth, int im
 					}
 				}
 			}
-			imageBlurred[y * imageWidth * 3 + x * 3 + c] = tempValue / maskTot;
+			imageBlurred[y * imageWidth * 3 + x * 3 + c] = tempValue;
 		}
 	}
 }
 
 void blurParHost() {
 	//Use CImg library to load the image(s) and mask
-	CImg<unsigned char> image("cake.ppm"), blurimage("cake.ppm");
+	CImg<unsigned char> image("cake-small.ppm"), blurimage("cake-small.ppm");
 
 	CImg<double> mask5(5, 5);
-	mask5(0, 0) = mask5(0, 4) = mask5(4, 0) = mask5(4, 4) = 5.0;
-	mask5(0, 1) = mask5(0, 3) = mask5(1, 0) = mask5(1, 4) = mask5(3, 0) = mask5(3, 4) = mask5(4, 1) = mask5(4, 3) = 6.0;
-	mask5(0, 2) = mask5(2, 0) = mask5(2, 4) = mask5(4, 2) = 7.0;
-	mask5(1, 1) = mask5(1, 3) = mask5(3, 1) = mask5(3, 3) = 8.0;
-	mask5(1, 2) = mask5(2, 1) = mask5(2, 3) = mask5(3, 2) = 9.0;
-	mask5(2, 2) = 10.0;
-
-	float maskTot = 0;
-	for (int i = 0; i < 5; i++) {
-		for (int j = 0; j < 5; j++) {
-			maskTot += mask5(i, j);
-		}
-	}
+	mask5(0, 0) = mask5(0, 4) = mask5(4, 0) = mask5(4, 4) = 1.0 / 256.0;
+	mask5(0, 1) = mask5(0, 3) = mask5(1, 0) = mask5(1, 4) = mask5(3, 0) = mask5(3, 4) = mask5(4, 1) = mask5(4, 3) = 4.0 / 256.0;
+	mask5(0, 2) = mask5(2, 0) = mask5(2, 4) = mask5(4, 2) = 6.0 / 256.0;
+	mask5(1, 1) = mask5(1, 3) = mask5(3, 1) = mask5(3, 3) = 16.0 / 256.0;
+	mask5(1, 2) = mask5(2, 1) = mask5(2, 3) = mask5(3, 2) = 24.0 / 256.0;
+	mask5(2, 2) = 36.0 / 256.0;
 
 	int imageWidth = image.width();
 	int imageHeight = image.height();
@@ -161,7 +154,7 @@ void blurParHost() {
 	int nrOfBlocks = 32;
 	int nrOfThreadsPerBlock = 1024;
 
-	blurParClient << <nrOfBlocks, nrOfThreadsPerBlock >> > (imageOrig, imageBlurred, imageWidth, imageHeight, mask, maskTot);
+	blurParClient << <nrOfBlocks, nrOfThreadsPerBlock >> > (imageOrig, imageBlurred, imageWidth, imageHeight, mask);
 	cudaDeviceSynchronize();
 
 	//Set image values
@@ -199,7 +192,6 @@ int main() {
 
 	blurParHost();
 
-	getchar();
 	cudaDeviceReset();
 	return 0;
 }
