@@ -54,7 +54,9 @@ void blurSeq() {
 	// Convolve and record the time taken to do the operation
 	auto begin = std::chrono::high_resolution_clock::now();
 	// Blur the image!
-	blurimage.convolve(mask5);
+	for (int i = 0; i < 5; i++) {
+		blurimage.convolve(mask5);
+	}
 	auto end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed = end - begin;
 	std::cout << "Time taken to convolve = " << elapsed.count() << " seconds";
@@ -79,12 +81,69 @@ void blurSeq() {
 	}
 }
 
+void blurParHost() {
+	//Use CImg library to load the image(s)
+	CImg<unsigned char> image("cake.ppm"), blurimage("cake.ppm");
+
+	int imageWidth = image.width();
+	int imageHeight = image.height();
+
+	//Allocate
+	int ***imageOrig;
+
+	cudaMallocManaged(&imageOrig, imageWidth * sizeof(int **));
+	for (int i = 0; i < imageWidth; i++) {
+		cudaMallocManaged(&imageOrig[i], imageHeight * sizeof(int *));
+		for (int j = 0; j < imageHeight; j++) {
+			cudaMallocManaged(&imageOrig[i][j], 3 * sizeof(int));
+		}
+	}
+
+	int ***imageBlurred;
+
+	cudaMallocManaged(&imageBlurred, imageWidth * sizeof(int **));
+	for (int i = 0; i < imageWidth; i++) {
+		cudaMallocManaged(&imageBlurred[i], imageHeight * sizeof(int *));
+		for (int j = 0; j < imageHeight; j++) {
+			cudaMallocManaged(&imageBlurred[i][j], 3 * sizeof(int));
+		}
+	}
+
+	//Get image values
+	for (int i = 0; i < imageWidth; i++) {
+		for (int j = 0; j < imageHeight; j++) {
+			for (int k = 0; k < 3; k++) {
+				imageOrig[i][j][k] = (int)image(i, j, 0, k);
+			}
+		}
+	}
+
+
+
+
+	//Deallocate
+	for (int i = 0; i < imageWidth; i++) {
+		for (int j = 0; j < imageHeight; j++) {
+			cudaFree(imageOrig[i][j]);
+			cudaFree(imageBlurred[i][j]);
+		}
+		cudaFree(imageOrig[i]);
+		cudaFree(imageBlurred[i]);
+	}
+	cudaFree(imageOrig);
+	cudaFree(imageBlurred);
+
+	cudaDeviceReset();
+}
+
 int main() {
 
 	std::cout << "Hello world!\n\n";
 
-	blurSeq();
+	//blurSeq();
 
-	getchar();
+	blurParHost();
+
+	//getchar();
 	return 0; 
 }

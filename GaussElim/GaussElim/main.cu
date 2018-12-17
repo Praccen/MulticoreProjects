@@ -52,7 +52,7 @@ double **initMatrixSeq() {
 }
 
 double **initMatrixPar() {
-	double **matrix = new double*[g_matrixSize];
+	double **matrix;// = new double*[g_matrixSize];
 	cudaMallocManaged(&matrix, g_matrixSize * sizeof(double *));
 
 	for (int i = 0; i < g_matrixSize; i++) {
@@ -187,14 +187,46 @@ void print(double **matrix, int matrixSize, double *vectorB, double *vectorY) {
 	printf("]\n\n");
 }
 
+bool compareMatrices(double **matrix1, double **matrix2, int matrixSize) {
+	//Check if matrix1 has the same values as matrix2
+	bool isSame = true;
+
+	for (int i = 0; i < matrixSize; i++) {
+		for (int j = 0; j < matrixSize; j++) {
+			if (abs(matrix1[i][j] - matrix2[i][j]) > 0.000001) {
+				isSame = false;
+				i = matrixSize;
+				j = matrixSize;
+			}
+		}
+	}
+
+	return isSame;
+}
+
+bool compareVectors(double *vector1, double *vector2, int vectorSize) {
+	//Check if vector1 has the same values as vector2
+	bool isSame = true;
+
+	for (int i = 0; i < vectorSize; i++) {
+		if (abs(vector1[i] - vector2[i]) > 0.000001) {
+			isSame = false;
+			i = vectorSize;
+		}
+	}
+
+	return isSame;
+}
+
 int main() {
 	time_point<Clock> m_start, m_end;
 
-	g_matrixSize = 5;
+	g_matrixSize = 2048;
 	g_maxNum = 15;
 	//g_init = "rand";
 	g_init = "fast";
 
+	//Allocate
 	double **seqMatrix = initMatrixSeq();
 	double *seqVectorB = initVectorBSeq();
 	double *seqVectorY = initVectorYSeq();
@@ -213,12 +245,13 @@ int main() {
 		print(seqMatrix, g_matrixSize, seqVectorB, seqVectorY);
 	}
 
+	//Allocate
 	double **parMatrix = initMatrixPar();
 	double *parVectorB = initVectorBPar();
 	double *parVectorY = initVectorYPar();
 
 	int numberOfBlocks = 32;
-	int numberOfThreadsPerBlock = 1024;
+	int numberOfThreadsPerBlock = 512;
 
 	m_start = Clock::now();
 	for (int k = 0; k < g_matrixSize; k++) {
@@ -243,6 +276,46 @@ int main() {
 	if (g_matrixSize < 15) {
 		print(parMatrix, g_matrixSize, parVectorB, parVectorY);
 	}
+
+	std::cout << "Check if the matrices are the same: ";
+	if (compareMatrices(seqMatrix, parMatrix, g_matrixSize)) {
+		std::cout << "Yes\n";
+	}
+	else {
+		std::cout << "No \n";
+	}
+
+	std::cout << "Check if the B-vectors are the same: ";
+	if (compareVectors(seqVectorB, parVectorB, g_matrixSize)) {
+		std::cout << "Yes\n";
+	}
+	else {
+		std::cout << "No \n";
+	}
+
+	std::cout << "Check if the Y-vectors are the same: ";
+	if (compareVectors(seqVectorY, parVectorY, g_matrixSize)) {
+		std::cout << "Yes\n";
+	}
+	else {
+		std::cout << "No \n";
+	}
+
+	//Deallocate seq memory
+	for (int i = 0; i < g_matrixSize; i++) {
+		delete[] seqMatrix[i];
+	}
+	delete[] seqMatrix;
+	delete[] seqVectorB;
+	delete[] seqVectorY;
+
+	//Deallocate unified (par) memory
+	for (int i = 0; i < g_matrixSize; i++) {
+		cudaFree(parMatrix[i]);
+	}
+	cudaFree(parMatrix);
+	cudaFree(parVectorB);
+	cudaFree(parVectorY);
 
 	getchar();
 	return 0;
