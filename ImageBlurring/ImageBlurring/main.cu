@@ -7,11 +7,6 @@
 
 #include "CImg.h"
 
-using Clock = std::chrono::steady_clock;
-using std::chrono::time_point;
-using std::chrono::duration_cast;
-using std::chrono::milliseconds;
-
 using namespace cimg_library;
 
 void blurSeq() {
@@ -57,7 +52,7 @@ void blurSeq() {
 	blurimage.convolve(mask5);
 	auto end = std::chrono::high_resolution_clock::now();
 	std::chrono::duration<double> elapsed = end - begin;
-	std::cout << "Time taken to convolve = " << elapsed.count() << " seconds";
+	std::cout << "Time taken to convolve = " << elapsed.count() << " seconds\n";
 
 	// Show the original and the blurred images and compare.
 
@@ -118,7 +113,7 @@ void blurParClient(float *imageOrig, float *imageBlurred, int imageWidth, int im
 
 void blurParHost() {
 	//Use CImg library to load the image(s) and mask
-	CImg<unsigned char> image("cake-small.ppm"), blurimage("cake-small.ppm");
+	CImg<unsigned char> image("cake.ppm"), blurimage("cake.ppm");
 
 	CImg<double> mask5(5, 5);
 	mask5(0, 0) = mask5(0, 4) = mask5(4, 0) = mask5(4, 4) = 1.0 / 256.0;
@@ -161,10 +156,14 @@ void blurParHost() {
 
 
 	int nrOfBlocks = 32;
-	int nrOfThreadsPerBlock = 1024;
+	int nrOfThreadsPerBlock = 512;
 
+	auto begin = std::chrono::high_resolution_clock::now();
 	blurParClient << <nrOfBlocks, nrOfThreadsPerBlock >> > (imageOrig, imageBlurred, imageWidth, imageHeight, mask);
 	cudaDeviceSynchronize();
+	auto end = std::chrono::high_resolution_clock::now();
+	std::chrono::duration<double> elapsed = end - begin;
+	std::cout << "Time taken to blurr (parallell) = " << elapsed.count() << " seconds\n";
 
 	//Set image values
 	for (int c = 0; c < 3; c++) {
@@ -195,12 +194,11 @@ void blurParHost() {
 }
 
 int main() {
-
-	std::cout << "Hello world!\n\n";
-
-	//blurSeq();
+	blurSeq();
 
 	blurParHost();
+
+	getchar();
 
 	cudaDeviceReset();
 	return 0;
