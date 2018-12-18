@@ -155,8 +155,8 @@ void blurParHost() {
 	}
 
 
-	int nrOfBlocks = 32;
-	int nrOfThreadsPerBlock = 512;
+	int nrOfBlocks = 16;
+	int nrOfThreadsPerBlock = 256;
 
 	auto begin = std::chrono::high_resolution_clock::now();
 	blurParClient << <nrOfBlocks, nrOfThreadsPerBlock >> > (imageOrig, imageBlurred, imageWidth, imageHeight, mask);
