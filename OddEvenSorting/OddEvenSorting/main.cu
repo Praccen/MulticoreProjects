@@ -16,11 +16,11 @@ void seqOddEvenSort(int *numSeq, int randomArrayLength) {
 	while (unsorted) {
 		unsorted = false;
 		for (int k = 0; k < 2; k++) {
-			for (int i = k, j = k + 1; j < randomArrayLength; i += 2, j += 2) {
-				if (numSeq[j] < numSeq[i]) {
+			for (int i = k; i < randomArrayLength - 1; i += 2) {
+				if (numSeq[i + 1] < numSeq[i]) {
 					temp = numSeq[i];
-					numSeq[i] = numSeq[j];
-					numSeq[j] = temp;
+					numSeq[i] = numSeq[i + 1];
+					numSeq[i + 1] = temp;
 					unsorted = true;
 				}
 			}
@@ -38,11 +38,11 @@ void parSort(int *numSeq, int randomArrayLength, bool *sortedArr) {
 
 	sortedArr[blockIndex] = true;
 	for (int k = 0; k < 2; k++) {
-		for (int i = (blockIndex * blockSize + threadIndex) * 2 + k, j = (blockIndex * blockSize + threadIndex) * 2 + k + 1; j < randomArrayLength; i += stride * 2, j += stride * 2) {
-			if (numSeq[j] < numSeq[i]) {
+		for (int i = (blockIndex * blockSize + threadIndex) * 2 + k; i < randomArrayLength - 1; i += stride * 2) {
+			if (numSeq[i + 1] < numSeq[i]) {
 				int temp = numSeq[i];
-				numSeq[i] = numSeq[j];
-				numSeq[j] = temp;
+				numSeq[i] = numSeq[i + 1];
+				numSeq[i + 1] = temp;
 				sortedArr[blockIndex] = false;
 			}
 		}
@@ -110,7 +110,7 @@ int main() {
 	cudaMallocManaged(&parNumSeq, randomArrayLength * sizeof(int));
 	cudaMallocManaged(&sortedArr, numberOfBlocks * sizeof(bool));
 
-	//Copy the random numbers to the parrallell array.
+	//Copy the random numbers to the parrallel array.
 	for (int i = 0; i < randomArrayLength; i++) {
 		parNumSeq[i] = numbers[i];
 	}
@@ -153,6 +153,8 @@ int main() {
 	cudaFree(parNumSeq);
 	cudaFree(sortedArr);
 	//------------------------
+
+	delete[] numbers;
 
 	cudaDeviceReset();
 
