@@ -88,22 +88,23 @@ void blurParClient(float *imageOrig, float *imageBlurred, int imageWidth, int im
 	int blockSize = blockDim.x;
 	int stride = gridDim.x * blockSize;
 
-	//i * imageHeight + j * 3 + k
 
-	for (int i = threadIndex + blockIndex * blockSize; i < imageWidth * imageHeight; i += stride) {
-		int x = i % imageWidth;
-		int y = (int)floor((double)(i / imageWidth));
+	for (int c = 0; c < 3; c++) {
+		for (int i = threadIndex + blockIndex * blockSize; i < imageWidth * imageHeight; i += stride) {
+			int x = i % imageWidth;
+			int y = (int)floor((double)(i / imageWidth));
 
-		for (int c = 0; c < 3; c++) {
 			float tempValue = 0;
 			for (int maskY = -2; maskY < 3; maskY++) {
 				for (int maskX = -2; maskX < 3; maskX++) {
 					if (x + maskX >= 0 && x + maskX < imageWidth && y + maskY >= 0 && y + maskY < imageHeight) {
-						tempValue += imageOrig[(y + maskY) * imageWidth * 3 + (x + maskX) * 3 + c] * mask[(maskY + 2) * 5 + (maskX + 2)];
+						//tempValue += imageOrig[(y + maskY) * imageWidth * 3 + (x + maskX) * 3 + c] * mask[(maskY + 2) * 5 + (maskX + 2)];
+						tempValue += imageOrig[c * imageHeight * imageWidth + (y + maskY) * imageWidth + (x + maskX)] * mask[(maskY + 2) * 5 + (maskX + 2)]; //Subtask
 					}
 				}
 			}
-			imageBlurred[y * imageWidth * 3 + x * 3 + c] = tempValue;
+			//imageBlurred[y * imageWidth * 3 + x * 3 + c] = tempValue;
+			imageBlurred[c * imageHeight * imageWidth + y * imageWidth + x] = tempValue; //Subtask
 		}
 	}
 }
@@ -135,10 +136,11 @@ void blurParHost() {
 
 
 	//Get image values
-	for (int y = 0; y < imageHeight; y++) {
-		for (int x = 0; x < imageWidth; x++) {
-			for (int c = 0; c < 3; c++) {
-				imageOrig[y * imageWidth * 3 + x * 3 + c] = (float)image(x, y, 0, c);
+	for (int c = 0; c < 3; c++) {
+		for (int y = 0; y < imageHeight; y++) {
+			for (int x = 0; x < imageWidth; x++) {
+				//imageOrig[y * imageWidth * 3 + x * 3 + c] = (float)image(x, y, 0, c);
+				imageOrig[c * imageHeight * imageWidth + y * imageWidth + x] = (float)image(x, y, 0, c); //Subtask
 			}
 		}
 	}
@@ -158,10 +160,11 @@ void blurParHost() {
 	cudaDeviceSynchronize();
 
 	//Set image values
-	for (int y = 0; y < imageHeight; y++) {
-		for (int x = 0; x < imageWidth; x++) {
-			for (int c = 0; c < 3; c++) {
-				blurimage(x, y, 0, c) = imageBlurred[y * imageWidth * 3 + x * 3 + c];
+	for (int c = 0; c < 3; c++) {
+		for (int y = 0; y < imageHeight; y++) {
+			for (int x = 0; x < imageWidth; x++) {
+				//imageOrig[y * imageWidth * 3 + x * 3 + c] = (float)image(x, y, 0, c);
+				blurimage(x, y, 0, c) = imageBlurred[c * imageHeight * imageWidth + y * imageWidth + x]; //Subtask
 			}
 		}
 	}
